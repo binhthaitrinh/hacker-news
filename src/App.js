@@ -25,9 +25,10 @@ const DEFAULT_QUERY = 'redux';
 const PATH_BASE = 'http://hn.algolia.com/api/v1';
 const PATH_SEARCH = '/search';
 const PARAM_SEARCH = 'query=';
+const PARAM_PAGE = 'page=';
 
-const isSearched = searchTerm => item =>
-  item.title.toLowerCase().includes(searchTerm.toLowerCase());
+// const isSearched = searchTerm => item =>
+//   item.title.toLowerCase().includes(searchTerm.toLowerCase());
 
 class App extends React.Component {
   constructor(props) {
@@ -38,76 +39,106 @@ class App extends React.Component {
       searchTerm: DEFAULT_QUERY,
     };
   }
+
+  onDismiss = (id) => {
+    const isNotId = item => item.objectID !== id;
+    
+    const updatedHits = this.state.result.hits.filter(isNotId);
+    this.setState({
+      result: Object.assign({}, this.state.result, {hits: updatedHits})
+    });
+  }
+
+  onSearchSubmit = (event) => {
+    const {searchTerm} = this.state;
+    this.fetchSearchTopStories(searchTerm);
+    event.preventDefault();
+  }
+
+  fetchSearchTopStories = (searchTerm, page = 0) => {
+    fetch(`${PATH_BASE}${PATH_SEARCH}?${PARAM_SEARCH}${searchTerm}&${PARAM_PAGE}${page}`)
+    .then(response => response.json())
+    .then(result => this.setSearchTopStories(result))
+    .catch(error => error);
+  }
   
   setSearchTopStories = (result) => {
-    this.setState({result});
+    const {hits, page} = result;
+    const oldHits = page !== 0 
+      ? this.state.result.hits
+      : [];
+    const updatedHits = [
+      ...oldHits,
+      ...hits
+    ]
+    this.setState({
+      result: {hits: updatedHits, page}
+    });
   }
 
   componentDidMount() {
     const {searchTerm} = this.state;
-    fetch(`${PATH_BASE}${PATH_SEARCH}?${PARAM_SEARCH}${searchTerm}`)
-      .then(response => response.json())
-      .then(result => this.setSearchTopStories(result))
-      .catch(error => error);
+    this.fetchSearchTopStories(searchTerm);
   }
 
-  onDismiss = (id) => {
-    const isNotId = (item) => {
-      return item.objectID !== id;
-    }
-    const updatedList = this.state.result.hits.filter(isNotId);
-    this.setState({
-      result: updatedList,
-    });
-  }
+  
 
   onSearchChange = (event) => {
     this.setState({
       searchTerm: event.target.value,
     });
-    console.log(this.state.searchTerm);
   }
 
 
   render() {
     const {result, searchTerm} = this.state;
-    if (!result) {
-      return null;
-    }
+    const page = (result && result.page) || 0;
     return (
       <div className="page">
         <div className="interactions">
           <Search
           value={searchTerm}
           onChange={this.onSearchChange}
+          onSubmit={this.onSearchSubmit}
           >
             Search
           </Search>
         </div>
-        <Table 
+        { result
+        ? <Table 
           list={result.hits}
-          pattern={searchTerm}
           onDismiss={this.onDismiss}
         />
+          : null
+        }
+
+        <div className="interactions">
+          <Button
+            onClick={() => this.fetchSearchTopStories(searchTerm, page+1)}
+          >
+            More
+          </Button>
+        </div>
         
       </div>
     )
   }
 }
 
-const Search = ({value, onChange, children}) => 
-  <form>
+const Search = ({value, onChange, onSubmit, children}) => 
+  <form onSubmit={onSubmit}>
     {children} <input 
     type="text" 
     value={value}
     onChange={onChange}
     />
+    <button type="submit">{children}</button>
   </form>
   
 
 
 
-const Table = ({list, pattern, onDismiss}) => {
+const Table = ({list, onDismiss}) => {
   const largeColumn = {
     width: '40%',
   };
@@ -121,7 +152,7 @@ const Table = ({list, pattern, onDismiss}) => {
   };
   return (
     <div className="table">
-    {list.filter(isSearched(pattern)).map(item => 
+    {list.map(item => 
       <div key={item.objectID} className="table-row">
         <span style={largeColumn}>
           <a href={item.url}>{item.title}</a>
@@ -131,7 +162,7 @@ const Table = ({list, pattern, onDismiss}) => {
         <span style={smallColumn}>{item.points}</span>
         <span style={smallColumn}>
           <Button
-            onclick={() => onDismiss(item.objectID)}
+            onClick={() => onDismiss(item.objectID)}
             className = "button-inline"
           > 
             Dismiss
@@ -141,7 +172,7 @@ const Table = ({list, pattern, onDismiss}) => {
       </div>  
     )}
     </div>
-  )
+  );
 }
   
   
@@ -149,14 +180,19 @@ const Table = ({list, pattern, onDismiss}) => {
   
 
 
-const Button = ({onClick, className = '', children}) => 
-  <button
-    onClick={onClick}
-    className={className}
-    type="button"
-  >
-    {children}
-  </button>
+const Button = ({onClick, className = '', children}) => {
+
+  return (
+    <button
+        onClick={onClick}
+        className = {className}
+        type="button"
+      >
+      {children}
+      </button>
+  );
+}
+  
     
   
 
